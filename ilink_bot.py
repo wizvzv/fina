@@ -348,7 +348,8 @@ def bot_worker():
             # ---- 内层循环：消息监听 + 定时提醒 ----
             buf = ""
             last_check_minute = -1
-            retry_delay = 1  # 指数退避初始延迟（秒）
+            retry_delay = 1   # 指数退避初始延迟（秒）
+            error_count = 0   # getupdates 连续错误次数
 
             while not stop_event.is_set():
                 result = api_post(
@@ -358,13 +359,18 @@ def bot_worker():
                     bot_state["bot_base_url"] or None,
                 )
 
-                # 网络/API 错误 → 指数退避，避免频繁重试
+                # 网络/API 错误 → 指数退避，连续 10 次错误触发重连
                 if result.get("_error"):
-                    print(f"[ilink_bot] getupdates 错误: {result['_error']}, 等待 {retry_delay}s 后重试", flush=True)
+                    error_count += 1
+                    print(f"[ilink_bot] getupdates 错误({error_count}/10): {result['_error']}, 等待 {retry_delay}s", flush=True)
+                    if error_count >= 10:
+                        add_log("getupdates 持续异常，触发重连...")
+                        break
                     time.sleep(retry_delay)
                     retry_delay = min(retry_delay * 2, 30)
                     continue
-                retry_delay = 1  # 正常时重置退避
+                retry_delay = 1    # 正常时重置退避
+                error_count = 0    # 正常时重置错误计数
                 buf = result.get("get_updates_buf") or buf
 
                 for msg in result.get("msgs") or []:
@@ -412,12 +418,6 @@ def bot_worker():
                             add_log(f"定时推送 [{minute_key}] 异常: {e}")
                             print(f"[ilink_bot] 定时推送 {minute_key} 异常: {err}", flush=True)
                     last_check_minute = minute_key
-
-                # 24h 重连：跳出内层循环
-                if bot_state["login_time"] and time.time() - bot_state["login_time"] > 23 * 3600:
-                    bot_state["status"] = "reconnecting"
-                    add_log("24h 到期，即将重连...")
-                    break
 
                 time.sleep(1)
 
