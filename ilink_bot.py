@@ -398,9 +398,19 @@ def bot_worker():
                 minute_key = now.strftime("%H:%M")
                 if config["enabled"] and minute_key != last_check_minute:
                     if minute_key in config["reminder_times"]:
-                        msg = build_fun_message()
-                        send_message(msg)
-                        print(f"[ilink_bot] 定时推送 {minute_key}", flush=True)
+                        try:
+                            msg = build_fun_message()
+                            ok = send_message(msg)
+                            if ok:
+                                add_log(f"定时推送 [{minute_key}] 已发送")
+                                print(f"[ilink_bot] 定时推送 {minute_key} 成功", flush=True)
+                            else:
+                                add_log(f"定时推送 [{minute_key}] 发送失败")
+                                print(f"[ilink_bot] 定时推送 {minute_key} 失败", flush=True)
+                        except Exception as e:
+                            err = traceback.format_exc()
+                            add_log(f"定时推送 [{minute_key}] 异常: {e}")
+                            print(f"[ilink_bot] 定时推送 {minute_key} 异常: {err}", flush=True)
                     last_check_minute = minute_key
 
                 # 24h 重连：跳出内层循环
