@@ -363,6 +363,29 @@ def bot_worker():
             error_count = 0   # getupdates 连续错误次数
 
             while not stop_event.is_set():
+                # 定时提醒（放在最前面，确保不被任何 continue 跳过）
+                now = datetime.now(TZ)
+                minute_key = now.strftime("%H:%M")
+                if config["enabled"] and minute_key != last_check_minute:
+                    times = config.get("reminder_times", [])
+                    matched = minute_key in times
+                    print(f"[ilink_bot] 定时检查: minute_key={repr(minute_key)} times={times} matched={matched}", flush=True)
+                    if matched:
+                        try:
+                            msg = build_fun_message()
+                            ok = send_message(msg)
+                            if ok:
+                                add_log(f"定时推送 [{minute_key}] 已发送")
+                                print(f"[ilink_bot] 定时推送 {minute_key} 成功", flush=True)
+                            else:
+                                add_log(f"定时推送 [{minute_key}] 发送失败")
+                                print(f"[ilink_bot] 定时推送 {minute_key} 失败", flush=True)
+                        except Exception as e:
+                            err = traceback.format_exc()
+                            add_log(f"定时推送 [{minute_key}] 异常: {e}")
+                            print(f"[ilink_bot] 定时推送 {minute_key} 异常: {err}", flush=True)
+                    last_check_minute = minute_key
+
                 result = api_post(
                     "ilink/bot/getupdates",
                     {"get_updates_buf": buf, "base_info": base_info()},
@@ -413,32 +436,6 @@ def bot_worker():
                             add_log(f"用户回复喝水，今日 {cups}/{goal} 杯")
                             print(f"[ilink_bot] 发送回复: {reply}", flush=True)
                             send_message(reply)
-
-                # 定时提醒
-                now = datetime.now(TZ)
-                minute_key = now.strftime("%H:%M")
-                if config["enabled"] and minute_key != last_check_minute:
-                    # debug: 打印当前分钟与配置对比
-                    times = config.get("reminder_times", [])
-                    matched = minute_key in times
-                    print(f"[ilink_bot] 定时检查: minute_key={repr(minute_key)} times={times} matched={matched}", flush=True)
-                    if matched:
-                        try:
-                            msg = build_fun_message()
-                            ok = send_message(msg)
-                            if ok:
-                                add_log(f"定时推送 [{minute_key}] 已发送")
-                                print(f"[ilink_bot] 定时推送 {minute_key} 成功", flush=True)
-                            else:
-                                add_log(f"定时推送 [{minute_key}] 发送失败")
-                                print(f"[ilink_bot] 定时推送 {minute_key} 失败", flush=True)
-                        except Exception as e:
-                            err = traceback.format_exc()
-                            add_log(f"定时推送 [{minute_key}] 异常: {e}")
-                            print(f"[ilink_bot] 定时推送 {minute_key} 异常: {err}", flush=True)
-                    else:
-                        print(f"[ilink_bot] 定时检查: {minute_key} 不在提醒时间列表中", flush=True)
-                    last_check_minute = minute_key
 
                 time.sleep(1)
 
