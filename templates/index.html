@@ -1,0 +1,620 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>喝水提醒管理后台</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background: #f0f2f5;
+            color: #333;
+            padding: 20px;
+        }
+        .container { max-width: 800px; margin: 0 auto; }
+
+        /* 头部 */
+        .header {
+            text-align: center;
+            padding: 30px 0;
+        }
+        .header h1 { font-size: 28px; }
+        .header p { color: #666; margin-top: 6px; }
+
+        /* 卡片 */
+        .card {
+            background: #fff;
+            border-radius: 12px;
+            padding: 24px;
+            margin-bottom: 16px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        }
+        .card h2 {
+            font-size: 18px;
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        /* 状态指示器 */
+        .status-bar {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px 16px;
+            border-radius: 8px;
+            font-size: 14px;
+        }
+        .status-bar.connected { background: #e8f5e9; color: #2e7d32; }
+        .status-bar.disconnected { background: #fce4ec; color: #c62828; }
+        .status-bar.scanning { background: #fff3e0; color: #e65100; }
+        .status-bar.starting { background: #e3f2fd; color: #1565c0; }
+        .status-dot {
+            width: 10px; height: 10px;
+            border-radius: 50%;
+            display: inline-block;
+        }
+        .status-dot.green { background: #4caf50; }
+        .status-dot.red { background: #f44336; }
+        .status-dot.orange { background: #ff9800; }
+        .status-dot.blue { background: #2196f3; }
+
+        /* 按钮 */
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .btn:hover { opacity: 0.85; }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .btn-primary { background: #1976d2; color: #fff; }
+        .btn-success { background: #388e3c; color: #fff; }
+        .btn-danger { background: #d32f2f; color: #fff; }
+        .btn-warning { background: #f57c00; color: #fff; }
+        .btn-sm { padding: 6px 12px; font-size: 12px; }
+
+        /* 操作按钮组 */
+        .actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 12px; }
+
+        /* 二维码 */
+        .qrcode-area {
+            text-align: center;
+            padding: 20px;
+            background: #fafafa;
+            border-radius: 8px;
+            margin-top: 12px;
+        }
+        .qrcode-area img { max-width: 240px; }
+        .qrcode-area p { color: #666; font-size: 13px; margin-top: 8px; word-break: break-all; }
+
+        /* 时间设置 */
+        .time-list { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+        .time-tag {
+            display: flex; align-items: center; gap: 6px;
+            padding: 6px 12px;
+            background: #e3f2fd;
+            border-radius: 20px;
+            font-size: 14px;
+        }
+        .time-tag .del {
+            cursor: pointer; color: #999;
+            font-weight: bold;
+        }
+        .time-tag .del:hover { color: #d32f2f; }
+        .time-input-group { display: flex; gap: 8px; }
+        .time-input-group input[type="time"] {
+            padding: 8px 12px; border: 1px solid #ddd;
+            border-radius: 8px; font-size: 14px;
+        }
+
+        /* 消息编辑 */
+        .msg-list { display: flex; flex-direction: column; gap: 8px; }
+        .msg-item {
+            display: flex; align-items: center; gap: 8px;
+            padding: 8px 12px;
+            background: #f5f5f5;
+            border-radius: 8px;
+        }
+        .msg-item input {
+            flex: 1; padding: 6px 10px;
+            border: 1px solid #ddd; border-radius: 6px;
+            font-size: 14px;
+        }
+        .msg-item .del-msg {
+            cursor: pointer; color: #999; font-weight: bold;
+        }
+        .msg-item .del-msg:hover { color: #d32f2f; }
+
+        /* 日志 */
+        .log-area {
+            background: #263238;
+            color: #e0e0e0;
+            padding: 16px;
+            border-radius: 8px;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            max-height: 200px;
+            overflow-y: auto;
+            line-height: 1.6;
+        }
+
+        /* 开关 */
+        .toggle-wrap {
+            display: flex; align-items: center; gap: 12px;
+            margin-bottom: 16px;
+        }
+        .toggle {
+            position: relative; width: 48px; height: 26px;
+            background: #ccc; border-radius: 13px;
+            cursor: pointer; transition: 0.3s;
+        }
+        .toggle.on { background: #4caf50; }
+        .toggle::after {
+            content: ''; position: absolute;
+            width: 22px; height: 22px; border-radius: 50%;
+            background: #fff; top: 2px; left: 2px;
+            transition: 0.3s;
+        }
+        .toggle.on::after { left: 24px; }
+
+        .toast {
+            position: fixed; top: 20px; right: 20px;
+            padding: 12px 24px; border-radius: 8px;
+            color: #fff; font-size: 14px;
+            z-index: 999; display: none;
+            animation: slideIn 0.3s;
+        }
+        .toast.success { background: #388e3c; }
+        .toast.error { background: #d32f2f; }
+        @keyframes slideIn {
+            from { transform: translateX(100px); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="header">
+        <h1>💧 喝水提醒管理后台</h1>
+        <p>基于 iLink API · 微信 ClawBot 推送</p>
+    </div>
+
+    <!-- 状态面板 -->
+    <div class="card">
+        <h2>📊 运行状态</h2>
+        <div id="statusBar" class="status-bar disconnected">
+            <span class="status-dot red"></span>
+            <span id="statusText">未启动</span>
+        </div>
+        <div class="actions">
+            <button class="btn btn-success" id="btnStart">▶ 启动连接</button>
+            <button class="btn btn-danger" id="btnStop" disabled>⏹ 停止</button>
+            <button class="btn btn-warning" id="btnTest" disabled>📨 测试推送</button>
+        </div>
+        <!-- 二维码显示 -->
+        <div class="qrcode-area" id="qrcodeArea" style="display:none;">
+            <img id="qrcodeImg" src="" alt="二维码">
+            <p id="qrcodeHint">请用手机微信扫码绑定 ClawBot</p>
+        </div>
+    </div>
+
+    <!-- 喝水统计 -->
+    <div class="card">
+        <h2>📊 喝水统计</h2>
+        <div style="display:flex; gap:20px; flex-wrap:wrap; margin-bottom:12px;">
+            <div style="text-align:center; flex:1; min-width:80px;">
+                <div style="font-size:32px; font-weight:bold; color:#1976d2;" id="statStreak">0</div>
+                <div style="font-size:12px; color:#666;">🔥 连续天数</div>
+            </div>
+            <div style="text-align:center; flex:1; min-width:80px;">
+                <div style="font-size:32px; font-weight:bold; color:#388e3c;" id="statCups">0</div>
+                <div style="font-size:12px; color:#666;">🥤 今日杯数</div>
+            </div>
+            <div style="text-align:center; flex:1; min-width:80px;">
+                <div style="font-size:32px; font-weight:bold; color:#f57c00;" id="statMl">0ml</div>
+                <div style="font-size:12px; color:#666;">💧 今日水量</div>
+            </div>
+        </div>
+        <!-- 进度条 -->
+        <div style="background:#e0e0e0; border-radius:10px; height:20px; overflow:hidden; margin-bottom:8px;">
+            <div id="statBar" style="background:linear-gradient(90deg,#4caf50,#8bc34a); height:100%; width:0%; border-radius:10px; transition:width 0.5s;"></div>
+        </div>
+        <div style="display:flex; justify-content:space-between; font-size:12px; color:#666;">
+            <span id="statProgress">0%</span>
+            <span>目标: <b id="statGoal">8</b> 杯/天</span>
+        </div>
+        <div class="actions" style="margin-top:12px;">
+            <button class="btn btn-success btn-sm" id="btnDrink">🥤 我喝水了 +1</button>
+            <button class="btn btn-warning btn-sm" id="btnResetStats" style="background:#757575;">🔄 重置统计</button>
+        </div>
+        <div style="margin-top:10px; display:flex; gap:8px; align-items:center;">
+            <span style="font-size:13px; color:#666;">每日目标:</span>
+            <input type="number" id="goalInput" value="8" min="1" max="20" style="width:60px;padding:4px;border:1px solid #ddd;border-radius:6px;text-align:center;">
+            <span style="font-size:13px; color:#666;">杯</span>
+            <button class="btn btn-primary btn-sm" id="btnGoal">设置</button>
+        </div>
+    </div>
+
+    <!-- 开关 -->
+    <div class="card">
+        <h2>⚙️ 提醒开关</h2>
+        <div class="toggle-wrap">
+            <div class="toggle on" id="toggleReminder"></div>
+            <span id="toggleLabel">提醒已开启</span>
+        </div>
+    </div>
+
+    <!-- 提醒时间设置 -->
+    <div class="card">
+        <h2>⏰ 提醒时间</h2>
+        <div class="time-list" id="timeList"></div>
+        <div class="time-input-group">
+            <input type="time" id="newTime" value="09:00">
+            <button class="btn btn-primary btn-sm" id="btnAddTime">＋ 添加</button>
+        </div>
+    </div>
+
+    <!-- 提示语设置 -->
+    <div class="card">
+        <h2>💬 提醒文案</h2>
+        <div class="msg-list" id="msgList"></div>
+        <div style="margin-top:10px;">
+            <input type="text" id="newMsg" placeholder="输入新的提醒文案..." style="padding:8px 12px;border:1px solid #ddd;border-radius:8px;font-size:14px;width:calc(100% - 100px);">
+            <button class="btn btn-primary btn-sm" id="btnAddMsg">＋ 添加</button>
+        </div>
+    </div>
+
+    <!-- 日志 -->
+    <div class="card">
+        <h2>📋 运行日志</h2>
+        <div class="log-area" id="logArea">
+            <div>等待启动...</div>
+        </div>
+    </div>
+</div>
+
+<!-- Toast 提示 -->
+<div class="toast" id="toast"></div>
+
+<script>
+const API = '';
+
+function toast(msg, type='success') {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.className = `toast ${type}`;
+    t.style.display = 'block';
+    setTimeout(() => t.style.display = 'none', 2500);
+}
+
+function log(msg) {
+    const area = document.getElementById('logArea');
+    const t = new Date().toLocaleTimeString();
+    area.innerHTML += `<div>[${t}] ${msg}</div>`;
+    area.scrollTop = area.scrollHeight;
+}
+
+let _serverLogCount = 0;
+
+async function refreshLogs() {
+    try {
+        const res = await fetch(`${API}/api/logs`);
+        const data = await res.json();
+        const logs = data.logs || [];
+        if (logs.length > _serverLogCount) {
+            const area = document.getElementById('logArea');
+            for (let i = _serverLogCount; i < logs.length; i++) {
+                area.innerHTML += `<div>${logs[i]}</div>`;
+            }
+            area.scrollTop = area.scrollHeight;
+            _serverLogCount = logs.length;
+        }
+    } catch (e) {
+        // 忽略轮询错误
+    }
+}
+
+// 状态更新
+async function refreshStatus() {
+    try {
+        const res = await fetch(`${API}/api/status`);
+        const data = await res.json();
+        const bar = document.getElementById('statusBar');
+        const text = document.getElementById('statusText');
+        const dot = bar.querySelector('.status-dot');
+
+        bar.className = 'status-bar';
+        switch (data.status) {
+            case 'logged_in':
+                bar.classList.add('connected');
+                dot.className = 'status-dot green';
+                text.textContent = data.user_connected ? '✓ 已连接（用户已绑定）' : '✓ 已登录（等待用户发消息）';
+                document.getElementById('btnTest').disabled = !data.user_connected;
+                document.getElementById('btnStart').disabled = true;
+                document.getElementById('btnStop').disabled = false;
+                document.getElementById('qrcodeArea').style.display = 'none';
+                break;
+            case 'scanning':
+                bar.classList.add('scanning');
+                dot.className = 'status-dot orange';
+                text.textContent = '⏳ 等待扫码...';
+                document.getElementById('btnStart').disabled = true;
+                document.getElementById('btnStop').disabled = false;
+                document.getElementById('btnTest').disabled = true;
+                // 显示二维码
+                if (data.qrcode_url) {
+                    const area = document.getElementById('qrcodeArea');
+                    const img = document.getElementById('qrcodeImg');
+                    const hint = document.getElementById('qrcodeHint');
+                    area.style.display = 'block';
+                    // 尝试加载保存的二维码图片
+                    img.src = `${API}/api/qrcode?_t=${Date.now()}`;
+                    img.onerror = () => {
+                        img.style.display = 'none';
+                        hint.textContent = `扫码链接: ${data.qrcode_url}`;
+                    };
+                    img.onload = () => {
+                        img.style.display = 'inline';
+                        hint.textContent = '请用手机微信扫码绑定 ClawBot';
+                    };
+                }
+                break;
+            case 'starting':
+                bar.classList.add('starting');
+                dot.className = 'status-dot blue';
+                text.textContent = '⏳ 启动中...';
+                break;
+            case 'error':
+                bar.classList.add('disconnected');
+                dot.className = 'status-dot red';
+                text.textContent = `✗ 错误: ${data.error_msg || '未知错误'}`;
+                document.getElementById('btnStart').disabled = false;
+                document.getElementById('btnStop').disabled = true;
+                document.getElementById('btnTest').disabled = true;
+                document.getElementById('qrcodeArea').style.display = 'none';
+                break;
+            default:
+                bar.classList.add('disconnected');
+                dot.className = 'status-dot red';
+                text.textContent = '⏹ 已停止';
+                document.getElementById('btnStart').disabled = false;
+                document.getElementById('btnStop').disabled = true;
+                document.getElementById('btnTest').disabled = true;
+                document.getElementById('qrcodeArea').style.display = 'none';
+        }
+
+        // 配置
+        if (data.config) {
+            updateTimeUI(data.config.reminder_times || []);
+            updateMsgUI(data.config.reminder_messages || []);
+            const enabled = data.config.enabled !== false;
+            const toggle = document.getElementById('toggleReminder');
+            toggle.className = `toggle ${enabled ? 'on' : ''}`;
+            document.getElementById('toggleLabel').textContent = enabled ? '提醒已开启' : '提醒已关闭';
+        }
+
+        // 统计
+        if (data.stats) {
+            const s = data.stats;
+            document.getElementById('statStreak').textContent = s.streak_days || 0;
+            document.getElementById('statCups').textContent = s.today_cups || 0;
+            document.getElementById('statMl').textContent = ((s.today_cups || 0) * (s.cup_ml || 250)) + 'ml';
+            const goal = s.daily_goal || 8;
+            const pct = Math.min((s.today_cups || 0) * 100 / goal, 100);
+            document.getElementById('statBar').style.width = pct + '%';
+            document.getElementById('statProgress').textContent = Math.round(pct) + '%';
+            document.getElementById('statGoal').textContent = goal;
+            document.getElementById('goalInput').value = goal;
+        }
+    } catch (e) {
+        log('获取状态失败: ' + e.message);
+    }
+}
+
+// 时间UI
+function updateTimeUI(times) {
+    const list = document.getElementById('timeList');
+    list.innerHTML = times.map(t => `<span class="time-tag">${t} <span class="del" data-time="${t}">×</span></span>`).join('');
+    list.querySelectorAll('.del').forEach(el => {
+        el.addEventListener('click', () => {
+            const t = el.dataset.time;
+            fetch(`${API}/api/config`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({reminder_times: times.filter(x => x !== t)})
+            }).then(() => { refreshStatus(); toast('已删除时间'); });
+        });
+    });
+}
+
+// 消息UI
+function escapeHtml(s) {
+    const d = document.createElement('div');
+    d.textContent = s;
+    return d.innerHTML;
+}
+function updateMsgUI(msgs) {
+    const list = document.getElementById('msgList');
+    list.innerHTML = msgs.map((m, i) => `
+        <div class="msg-item">
+            <input type="text" value="${escapeHtml(m)}" data-idx="${i}">
+            <span class="del-msg" data-idx="${i}">×</span>
+        </div>
+    `).join('');
+    // 修改事件
+    list.querySelectorAll('input').forEach(inp => {
+        inp.addEventListener('change', () => {
+            const idx = parseInt(inp.dataset.idx);
+            const newMsgs = [...msgs];
+            newMsgs[idx] = inp.value;
+            fetch(`${API}/api/config`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({reminder_messages: newMsgs})
+            }).then(() => toast('文案已更新'));
+        });
+    });
+    // 删除事件
+    list.querySelectorAll('.del-msg').forEach(el => {
+        el.addEventListener('click', () => {
+            const idx = parseInt(el.dataset.idx);
+            const newMsgs = msgs.filter((_, i) => i !== idx);
+            fetch(`${API}/api/config`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({reminder_messages: newMsgs})
+            }).then(() => { refreshStatus(); toast('已删除文案'); });
+        });
+    });
+}
+
+// 事件绑定
+document.addEventListener('DOMContentLoaded', () => {
+    // 启动
+    document.getElementById('btnStart').addEventListener('click', async () => {
+        try {
+            const res = await fetch(`${API}/api/start`, {method: 'POST'});
+            if (!res.ok) { toast('启动请求失败', 'error'); return; }
+            toast('正在启动...');
+            log('启动连接...');
+            // 立即刷新状态
+            await refreshStatus();
+            // 继续轮询直到状态变化
+            let retry = 0;
+            const poll = setInterval(async () => {
+                retry++;
+                await refreshStatus();
+                const bar = document.getElementById('statusBar');
+                if (retry > 30 || bar.classList.contains('connected') || bar.classList.contains('scanning')) {
+                    clearInterval(poll);
+                }
+            }, 1000);
+            setTimeout(() => clearInterval(poll), 30000);
+        } catch (e) {
+            toast('启动失败: ' + e.message, 'error');
+            log('启动失败: ' + e.message);
+        }
+    });
+
+    // 停止
+    document.getElementById('btnStop').addEventListener('click', async () => {
+        await fetch(`${API}/api/stop`, {method: 'POST'});
+        toast('已停止');
+        log('已停止');
+        refreshStatus();
+    });
+
+    // 测试推送
+    document.getElementById('btnTest').addEventListener('click', async () => {
+        const res = await fetch(`${API}/api/test`, {method: 'POST'});
+        const data = await res.json();
+        if (data.ok) {
+            toast('✅ 测试消息已发送！请查看微信');
+            log('发送测试消息');
+        } else {
+            toast('❌ ' + data.message, 'error');
+        }
+    });
+
+    // 开关
+    document.getElementById('toggleReminder').addEventListener('click', async () => {
+        const toggle = document.getElementById('toggleReminder');
+        const currentlyOn = toggle.classList.contains('on');
+        await fetch(`${API}/api/config`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({enabled: !currentlyOn})
+        });
+        refreshStatus();
+        toast(!currentlyOn ? '提醒已开启' : '提醒已关闭');
+    });
+
+    // 添加时间
+    document.getElementById('btnAddTime').addEventListener('click', async () => {
+        const val = document.getElementById('newTime').value;
+        // 获取当前时间列表
+        const res = await fetch(`${API}/api/config`);
+        const data = await res.json();
+        const times = data.reminder_times || [];
+        if (times.includes(val)) { toast('该时间已存在', 'error'); return; }
+        times.push(val);
+        times.sort();
+        await fetch(`${API}/api/config`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({reminder_times: times})
+        });
+        refreshStatus();
+        toast(`已添加 ${val}`);
+    });
+
+    // 添加文案
+    document.getElementById('btnAddMsg').addEventListener('click', async () => {
+        const val = document.getElementById('newMsg').value.trim();
+        if (!val) { toast('请输入文案', 'error'); return; }
+        const res = await fetch(`${API}/api/config`);
+        const data = await res.json();
+        const msgs = data.reminder_messages || [];
+        msgs.push(val);
+        await fetch(`${API}/api/config`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({reminder_messages: msgs})
+        });
+        refreshStatus();
+        document.getElementById('newMsg').value = '';
+        toast('已添加文案');
+    });
+
+    // 初始加载
+    refreshStatus();
+    log('管理后台已加载');
+    // 定时刷新
+    setInterval(refreshStatus, 3000);
+    setInterval(refreshLogs, 2000);
+
+    // 手动喝水
+    document.getElementById('btnDrink').addEventListener('click', async () => {
+        const res = await fetch(`${API}/api/drink`, {method: 'POST'});
+        const data = await res.json();
+        if (data.ok) {
+            toast(`已记录！今日已喝 ${data.cups} 杯 💧`);
+            log(`手动记录喝水，今日 ${data.cups} 杯`);
+            refreshStatus();
+        } else {
+            toast('记录失败', 'error');
+        }
+    });
+
+    // 重置统计
+    document.getElementById('btnResetStats').addEventListener('click', async () => {
+        if (!confirm('确定重置所有统计数据？（连续天数、杯数将归零）')) return;
+        await fetch(`${API}/api/reset_stats`, {method: 'POST'});
+        toast('统计已重置');
+        refreshStatus();
+    });
+
+    // 设置目标
+    document.getElementById('btnGoal').addEventListener('click', async () => {
+        const goal = parseInt(document.getElementById('goalInput').value);
+        if (!goal || goal < 1 || goal > 20) { toast('请输入1-20之间的目标', 'error'); return; }
+        await fetch(`${API}/api/goal`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({goal})
+        });
+        toast(`每日目标已设为 ${goal} 杯`);
+        refreshStatus();
+    });
+});
+</script>
+</body>
+</html>
