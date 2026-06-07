@@ -76,8 +76,10 @@ def api_start():
 
 @app.route("/api/debug", methods=["POST"])
 def api_debug():
-    """调试接口 - 直接测试bot启动"""
-    import traceback, io, contextlib
+    """调试接口 - 仅开发环境可用"""
+    if os.environ.get("FLASK_ENV") != "development":
+        return jsonify({"ok": False, "error": "仅开发环境可用"}), 403
+    import io, contextlib
     buf = io.StringIO()
     with contextlib.redirect_stdout(buf):
         try:
@@ -159,11 +161,16 @@ def api_reset_stats():
 @app.route("/api/goal", methods=["POST"])
 def api_goal():
     """设置每日目标杯数"""
-    data = request.json
-    goal = int(data.get("goal", 8))
-    ilink_bot.stats["daily_goal"] = goal
-    ilink_bot.save_stats()
-    return jsonify({"ok": True})
+    try:
+        data = request.json
+        goal = int(data.get("goal", 8))
+        if goal < 1 or goal > 99:
+            return jsonify({"ok": False, "error": "目标杯数必须在 1-99 之间"}), 400
+        ilink_bot.stats["daily_goal"] = goal
+        ilink_bot.save_stats()
+        return jsonify({"ok": True})
+    except (ValueError, TypeError):
+        return jsonify({"ok": False, "error": "无效的目标杯数"}), 400
 
 
 if __name__ == "__main__":

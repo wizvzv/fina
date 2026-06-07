@@ -15,6 +15,7 @@ import threading
 import qrcode
 from io import BytesIO
 import traceback
+import tempfile
 
 # 时区（必须在日志函数之前定义）
 TZ = timezone(timedelta(hours=8))
@@ -84,8 +85,15 @@ def load_stats():
 
 
 def save_stats():
-    with open(STATS_FILE, "w", encoding="utf-8") as f:
-        json.dump(stats, f, ensure_ascii=False, indent=2)
+    """原子写入 stats.json"""
+    fd, tmp = tempfile.mkstemp(dir=os.path.dirname(STATS_FILE) or ".")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            json.dump(stats, f, ensure_ascii=False, indent=2)
+        os.replace(tmp, STATS_FILE)
+    except:
+        os.unlink(tmp)
+        raise
 
 
 def check_new_day():
@@ -157,8 +165,15 @@ def load_config():
 
 
 def save_config():
-    with open(CONFIG_FILE, "w", encoding="utf-8") as f:
-        json.dump(config, f, ensure_ascii=False, indent=2)
+    """原子写入 bot_config.json"""
+    fd, tmp = tempfile.mkstemp(dir=os.path.dirname(CONFIG_FILE) or ".")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            json.dump(config, f, ensure_ascii=False, indent=2)
+        os.replace(tmp, CONFIG_FILE)
+    except:
+        os.unlink(tmp)
+        raise
 
 
 def make_headers(token=None):
@@ -282,11 +297,7 @@ def bot_worker():
                     bot_state["bot_token"] = status["bot_token"]
                     bot_state["bot_base_url"] = status.get("baseurl") or status.get("base_url") or ""
                     bot_state["login_time"] = time.time()
-                    # 尝试从登录响应中直接获取用户信息（如果有）
-                    uid = status.get("from_user_id") or status.get("ilink_user_id") or ""
-                    if uid:
-                        bot_state["user_from_id"] = uid
-                        print(f"[ilink_bot] 从登录响应获取用户ID: {uid}", flush=True)
+                    print(f"[ilink_bot] 登录响应 ilink_user_id={status.get('ilink_user_id','')}", flush=True)
                     ctx = status.get("context_token") or status.get("ilink_context_token") or ""
                     if ctx:
                         bot_state["user_context_token"] = ctx
@@ -393,7 +404,6 @@ def bot_worker():
                         if matched:
                             cups = record_drink()
                             goal = stats["daily_goal"]
-                            check_new_day()
                             reply = f"收到！今日已喝 {cups}/{goal} 杯，继续加油~"
                             add_log(f"用户回复喝水，今日 {cups}/{goal} 杯")
                             print(f"[ilink_bot] 发送回复: {reply}", flush=True)
