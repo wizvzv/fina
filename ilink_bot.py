@@ -372,6 +372,11 @@ def bot_worker():
 
                 # 网络/API 错误 → 指数退避，连续 10 次错误触发重连
                 if result.get("_error"):
+                    # 长轮询超时是正常行为，不计入错误计数
+                    if "Read timed out" in result["_error"]:
+                        print("[ilink_bot] getupdates 长轮询超时，继续下一轮", flush=True)
+                        time.sleep(0.5)
+                        continue
                     error_count += 1
                     print(f"[ilink_bot] getupdates 错误({error_count}/10): {result['_error']}, 等待 {retry_delay}s", flush=True)
                     if error_count >= 10:
