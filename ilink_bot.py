@@ -480,7 +480,7 @@ def get_status():
     check_new_day()
     return {
         "status": bot_state["status"],
-        "user_connected": bool(bot_state["user_from_id"]),
+        "user_connected": bool(bot_state["user_from_id"] and bot_state["user_context_token"]),
         "qrcode_url": bot_state["qrcode_url"],
         "error_msg": bot_state["error_msg"],
         "config": config,
