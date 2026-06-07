@@ -403,7 +403,11 @@ def bot_worker():
                 now = datetime.now(TZ)
                 minute_key = now.strftime("%H:%M")
                 if config["enabled"] and minute_key != last_check_minute:
-                    if minute_key in config["reminder_times"]:
+                    # debug: 打印当前分钟与配置对比
+                    times = config.get("reminder_times", [])
+                    matched = minute_key in times
+                    print(f"[ilink_bot] 定时检查: minute_key={repr(minute_key)} times={times} matched={matched}", flush=True)
+                    if matched:
                         try:
                             msg = build_fun_message()
                             ok = send_message(msg)
@@ -417,6 +421,8 @@ def bot_worker():
                             err = traceback.format_exc()
                             add_log(f"定时推送 [{minute_key}] 异常: {e}")
                             print(f"[ilink_bot] 定时推送 {minute_key} 异常: {err}", flush=True)
+                    else:
+                        print(f"[ilink_bot] 定时检查: {minute_key} 不在提醒时间列表中", flush=True)
                     last_check_minute = minute_key
 
                 time.sleep(1)
