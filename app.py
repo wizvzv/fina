@@ -16,6 +16,7 @@ import qrcode
 
 BASE_DIR = os.path.dirname(__file__)
 app = Flask(__name__)
+app.secret_key = os.environ.get("SECRET_KEY", os.urandom(24))
 
 
 @app.route("/static/<path:filename>")
@@ -61,11 +62,8 @@ def api_logs():
 
 @app.route("/api/start", methods=["POST"])
 def api_start():
-    """启动bot（直接调用，start内部自己开线程）"""
+    """启动bot（状态重置逻辑集中在 ilink_bot.start() 中）"""
     try:
-        # 重置状态
-        ilink_bot.bot_state["status"] = "starting"
-        ilink_bot.bot_state["error_msg"] = ""
         ilink_bot.start()
         return jsonify({"ok": True})
     except Exception as e:

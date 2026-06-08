@@ -11,7 +11,7 @@
 pip install -r requirements.txt
 
 # 2. 启动
-python bot.py
+python app.py
 ```
 
 ### 方式二：部署到 Railway

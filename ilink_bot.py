@@ -48,6 +48,9 @@ bot_state = {
     "qrcode_url": "",
 }
 
+# 线程锁保护全局可变状态
+_state_lock = threading.Lock()
+
 # 全局停止事件（模块级，bot_worker 和 stop() 都能访问）
 stop_event = None
 
@@ -176,8 +179,17 @@ def save_config():
         raise
 
 
+def _derive_uin(token):
+    """基于 token 生成固定的 UIN，避免每次请求都变化"""
+    if not token:
+        return "0"
+    import hashlib
+    h = hashlib.md5(token[:8].encode()).hexdigest()
+    return str(int(h, 16) % 0xFFFFFFFF)
+
+
 def make_headers(token=None):
-    uin = str(random.randint(0, 0xFFFFFFFF))
+    uin = _derive_uin(token)
     headers = {
         "Content-Type": "application/json",
         "AuthorizationType": "ilink_bot_token",
@@ -198,18 +210,32 @@ def api_post(path, body, token=None, base_url=None):
     url = f"{base_url or BASE_URL}/{path}"
     try:
         r = requests.post(url, json=body, headers=make_headers(token), timeout=15)
+        r.raise_for_status()
         return r.json()
+    except requests.exceptions.HTTPError as e:
+        return {"_error": f"HTTP {r.status_code}: {e}", "_status_code": r.status_code, "_response": r.text[:500]}
+    except requests.exceptions.RequestException as e:
+        return {"_error": f"网络错误: {e}"}
+    except json.JSONDecodeError as e:
+        return {"_error": f"JSON解析错误: {e}", "_response": r.text[:500]}
     except Exception as e:
-        return {"_error": str(e)}
+        return {"_error": f"未知错误: {e}"}
 
 
 def api_get(path, token=None, base_url=None):
     url = f"{base_url or BASE_URL}/{path}"
     try:
         r = requests.get(url, headers=make_headers(token), timeout=15)
+        r.raise_for_status()
         return r.json()
+    except requests.exceptions.HTTPError as e:
+        return {"_error": f"HTTP {r.status_code}: {e}", "_status_code": r.status_code, "_response": r.text[:500]}
+    except requests.exceptions.RequestException as e:
+        return {"_error": f"网络错误: {e}"}
+    except json.JSONDecodeError as e:
+        return {"_error": f"JSON解析错误: {e}", "_response": r.text[:500]}
     except Exception as e:
-        return {"_error": str(e)}
+        return {"_error": f"未知错误: {e}"}
 
 
 def send_message(text):
@@ -281,13 +307,9 @@ def bot_worker():
 
             deadline = time.time() + 300
             base = BASE_URL
-            vcode = None
-            scanned = False
 
             while time.time() < deadline and not stop_event.is_set():
                 endpoint = f"ilink/bot/get_qrcode_status?qrcode={quote(qrcode_val, safe='')}"
-                if vcode:
-                    endpoint += f"&verify_code={quote(vcode, safe='')}"
                 status = api_get(endpoint, None, base)
                 state = status.get("status", "")
 
@@ -314,9 +336,6 @@ def bot_worker():
                 if status.get("redirect_host"):
                     base = f"https://{status['redirect_host']}"
                     continue
-
-                if state == "scanned" and not scanned:
-                    scanned = True
 
                 if state in ("need_verifycode", "verify_code_blocked") or status.get("need_verifycode"):
                     if state == "verify_code_blocked":
@@ -439,18 +458,30 @@ def bot_worker():
 
                 time.sleep(1)
 
-            # 重连准备
+            # 重连准备：彻底清空所有认证信息，避免旧 token 影响新登录
             if not stop_event.is_set():
-                bot_state["user_from_id"] = ""
-                bot_state["user_context_token"] = ""
+                with _state_lock:
+                    bot_state["bot_token"] = ""
+                    bot_state["bot_base_url"] = ""
+                    bot_state["user_from_id"] = ""
+                    bot_state["user_context_token"] = ""
+                    bot_state["qrcode_url"] = ""
+                # 清理二维码文件
+                qr_path = os.path.join(os.path.dirname(__file__), "qrcode.png")
+                try:
+                    if os.path.exists(qr_path):
+                        os.remove(qr_path)
+                except Exception:
+                    pass
                 add_log("重连准备完成，即将重新登录...")
 
         add_log("Bot 线程已退出")
 
     except Exception as e:
         err = traceback.format_exc()
-        bot_state["status"] = "error"
-        bot_state["error_msg"] = f"运行异常: {e}"
+        with _state_lock:
+            bot_state["status"] = "error"
+            bot_state["error_msg"] = f"运行异常: {e}"
         print(f"[ilink_bot] 异常退出:\n{err}", flush=True)
 
 
@@ -462,8 +493,15 @@ def start():
     if _bot_thread and _bot_thread.is_alive():
         # 旧线程还在，强制停止再重启
         stop()
-    bot_state["status"] = "starting"
-    bot_state["error_msg"] = ""
+    # 彻底重置所有状态，避免旧 token 残留导致新设备扫码异常
+    with _state_lock:
+        bot_state["status"] = "starting"
+        bot_state["error_msg"] = ""
+        bot_state["bot_token"] = ""
+        bot_state["bot_base_url"] = ""
+        bot_state["user_from_id"] = ""
+        bot_state["user_context_token"] = ""
+        bot_state["qrcode_url"] = ""
     _bot_thread = threading.Thread(target=bot_worker, daemon=True)
     _bot_thread.start()
     print("[ilink_bot] start() 已创建新线程", flush=True)
@@ -471,15 +509,23 @@ def start():
     # 等 0.5 秒看线程是否还活着
     time.sleep(0.5)
     if not _bot_thread.is_alive():
-        bot_state["status"] = "error"
-        bot_state["error_msg"] = "Bot线程启动后立即退出，请查看终端日志"
+        with _state_lock:
+            bot_state["status"] = "error"
+            bot_state["error_msg"] = "Bot线程启动后立即退出，请查看终端日志"
         print("[ilink_bot] 线程已退出！", flush=True)
 
 
 def stop():
     """停止 Bot 线程"""
     global stop_event, _bot_thread
-    bot_state["status"] = "stopped"
+    with _state_lock:
+        bot_state["status"] = "stopped"
+        bot_state["bot_token"] = ""
+        bot_state["bot_base_url"] = ""
+        bot_state["user_from_id"] = ""
+        bot_state["user_context_token"] = ""
+        bot_state["qrcode_url"] = ""
+        bot_state["error_msg"] = ""
     if stop_event:
         stop_event.set()  # 通知线程退出
     # 等待线程结束（最多5秒）
@@ -490,14 +536,15 @@ def stop():
 
 def get_status():
     check_new_day()
-    return {
-        "status": bot_state["status"],
-        "user_connected": bool(bot_state["user_from_id"] and bot_state["user_context_token"]),
-        "qrcode_url": bot_state["qrcode_url"],
-        "error_msg": bot_state["error_msg"],
-        "config": config,
-        "stats": dict(stats),
-    }
+    with _state_lock:
+        return {
+            "status": bot_state["status"],
+            "user_connected": bool(bot_state["user_from_id"] and bot_state["user_context_token"]),
+            "qrcode_url": bot_state["qrcode_url"],
+            "error_msg": bot_state["error_msg"],
+            "config": config,
+            "stats": dict(stats),
+        }
 
 
 def update_config(new_config):

@@ -6,7 +6,7 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY app.py ilink_bot.py bot_config.json ./
+COPY app.py ilink_bot.py bot_config.json stats.json ./
 COPY templates ./templates
 
 EXPOSE 5000
